@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Odin - The Mercenary - WebUI</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div class="shell">
+    <div class="top">
+      <div class="title">Odin - The Mercenary <span id="versionBadge" class="badge">loading</span></div>
+      <div class="muted">Edits <span class="mono">config/spawn.jsonc</span> and hot-applies.</div>
+    </div>
+
+    <div class="bar">
+      <button id="reloadBtn">Reload</button>
+      <button id="saveBtn" class="primary">Save & Apply</button>
+      <span id="status" class="status"></span>
+    </div>
+
+    <section class="bounty-card">
+      <div class="bounty-head">
+        <div>
+          <div class="bounty-title">Odin's Bounty</div>
+          <div id="bountyState" class="muted">No profile loaded.</div>
+        </div>
+        <div id="heatValue" class="heat-value mono">0 / 100</div>
+      </div>
+      <div class="heat-track"><div id="heatFill" class="heat-fill"></div></div>
+      <div class="bounty-controls">
+        <label>Set Heat <input id="heatInput" type="number" min="0" max="100" value="0" /></label>
+        <button id="setHeatBtn">Apply for next raid</button>
+        <button id="resetBountyBtn">Reset</button>
+        <span id="bountyStatus" class="status"></span>
+      </div>
+      <div id="bountyReason" class="bounty-reason muted"></div>
+    </section>
+
+    <div id="list" class="list"></div>
+
+    <div class="foot muted">
+      Open: <span id="openAddress" class="mono"></span> (change in <span class="mono">config/webui.jsonc</span>)
+    </div>
+  </div>
+
+<script>
+const statusEl = document.getElementById("status");
+const listEl = document.getElementById("list");
+const versionBadgeEl = document.getElementById("versionBadge");
+const bountyStateEl = document.getElementById("bountyState");
+const bountyReasonEl = document.getElementById("bountyReason");
+const bountyStatusEl = document.getElementById("bountyStatus");
+const heatValueEl = document.getElementById("heatValue");
+const heatFillEl = document.getElementById("heatFill");
+const heatInputEl = document.getElementById("heatInput");
+document.getElementById("openAddress").textContent = window.location.origin;
+
+document.getElementById("reloadBtn").addEventListener("click", () => loadAll());
+document.getElementById("saveBtn").addEventListener("click", () => save());
+document.getElementById("setHeatBtn").addEventListener("click", () => setHeat());
+document.getElementById("resetBountyBtn").addEventListener("click", () => resetBounty());
+
+function setStatus(msg, isError=false){
+  statusEl.textContent = msg || "";
+  statusEl.classList.toggle("err", !!isError);
+}
+
+function clampInt(v, min, max){
+  let n = Number(v || 0);
+  if (!Number.isFinite(n)) n = 0;
+  n = Math.floor(n);
+  if (n < min) n = min;
+  if (n > max) n = max;
+  return n;
+}
+
+function ensureMapCfg(mapId){
+  if (!cfg.maps) cfg.maps = {};
+  if (!cfg.maps[mapId]){
+    cfg.maps[mapId] = { enabled: false, chance: 0, zones: [], disabledZones: [] };
+  }
+  const m = cfg.maps[mapId];
+  if (!Array.isArray(m.zones)) m.zones = [];
+  if (!Array.isArray(m.disabledZones)) m.disabledZones = [];
+  if (typeof m.enabled !== "boolean") m.enabled = !!m.enabled;
+  if (typeof m.chance !== "number") m.chance = clampInt(m.chance, 0, 100);
+}
+
+function isZoneEnabled(mapId, zone){
+  ensureMapCfg(mapId);
+  const dis = new Set((cfg.maps[mapId].disabledZones || []).map(z => String(z).toLowerCase()));
+  return !dis.has(String(zone).toLowerCase());
+}
+
+function setZoneEnabled(mapId, zone, enabled){
+  ensureMapCfg(mapId);
+  const dz = cfg.maps[mapId].disabledZones;
+  const idx = dz.findIndex(x => String(x).toLowerCase() === String(zone).toLowerCase());
+
+  if (enabled){
+    if (idx >= 0) dz.splice(idx, 1);
+  } else {
+    if (idx < 0) dz.push(zone);
+  }
+}
+
+let cfg = null;
+let meta = null;
+let bounty = null;
+
+function renderBounty(){
+  if (!bounty || !bounty.hasProfile){
+    bountyStateEl.textContent = "No unambiguous profile yet. Start one raid first.";
+    bountyReasonEl.textContent = bounty ? bounty.reason : "";
+    heatValueEl.textContent = "0 / 100";
+    heatFillEl.style.width = "0%";
+    return;
+  }
+
+  const maxHeat = Math.max(1, Number(bounty.maxHeat || 100));
+  const heat = clampInt(bounty.heat, 0, maxHeat);
+  heatInputEl.max = String(maxHeat);
+  heatInputEl.value = String(heat);
+  heatValueEl.textContent = heat + " / " + maxHeat;
+  heatFillEl.style.width = Math.round((heat / maxHeat) * 100) + "%";
+
+  if (!bounty.enabled){
+    bountyStateEl.textContent = "Bounty system disabled in config/bounty.jsonc.";
+  } else if (bounty.huntActive){
+    bountyStateEl.textContent = "Odin is hunting now. His spawn is forced.";
+  } else if (bounty.respiteRaidsRemaining > 0){
+    bountyStateEl.textContent = "Respite: " + bounty.respiteRaidsRemaining + " raid(s) remaining.";
+  } else if (bounty.contractActive){
+    bountyStateEl.textContent = "Contract active. Odin will hunt in the next PMC raid.";
+  } else {
+    bountyStateEl.textContent = "No active contract. Activates at " + bounty.activationThreshold + " Heat.";
+  }
+
+  bountyReasonEl.textContent = bounty.reason || "";
+}
+
+function render(){
+  listEl.innerHTML = "";
+
+  const maps = (meta && meta.maps) ? meta.maps : Object.keys(cfg.maps || {});
+  maps.forEach(mapId => {
+    ensureMapCfg(mapId);
+
+    // Self-heal: if config zones are empty but meta has zones, copy them into cfg.zones (authoritative list).
+    const metaZones = (meta && meta.zonesByMap && meta.zonesByMap[mapId]) ? meta.zonesByMap[mapId] : [];
+    if ((cfg.maps[mapId].zones || []).length === 0 && metaZones.length > 0){
+      cfg.maps[mapId].zones = [...metaZones];
+    }
+
+    const m = cfg.maps[mapId];
+
+    const row = document.createElement("div");
+    row.className = "row";
+
+    const head = document.createElement("div");
+    head.className = "head";
+
+    const name = document.createElement("div");
+    name.className = "name mono";
+    name.textContent = mapId;
+
+    const enabled = document.createElement("label");
+    enabled.className = "toggle";
+    const enabledCb = document.createElement("input");
+    enabledCb.type = "checkbox";
+    enabledCb.checked = !!m.enabled;
+    enabledCb.addEventListener("change", () => { m.enabled = enabledCb.checked; });
+    enabled.appendChild(enabledCb);
+    enabled.appendChild(document.createTextNode(" enabled"));
+
+    const chanceWrap = document.createElement("div");
+    chanceWrap.className = "chance";
+
+    const chanceVal = document.createElement("div");
+    chanceVal.className = "mono";
+    chanceVal.textContent = (m.chance ?? 0) + "%";
+
+    const slider = document.createElement("input");
+    slider.type = "range";
+    slider.min = "0";
+    slider.max = "100";
+    slider.value = String(m.chance ?? 0);
+    slider.addEventListener("input", () => {
+      m.chance = clampInt(slider.value, 0, 100);
+      slider.value = String(m.chance);
+      chanceVal.textContent = m.chance + "%";
+    });
+
+    chanceWrap.appendChild(chanceVal);
+    chanceWrap.appendChild(slider);
+
+    head.appendChild(name);
+    head.appendChild(enabled);
+    head.appendChild(chanceWrap);
+
+    const details = document.createElement("details");
+    details.className = "zones";
+
+    const summary = document.createElement("summary");
+    summary.textContent = "BotZones";
+    details.appendChild(summary);
+
+    const zones = (cfg.maps[mapId].zones || []);
+    const zoneList = document.createElement("div");
+    zoneList.className = "zonelist";
+
+    if (zones.length === 0){
+      const hint = document.createElement("div");
+      hint.className = "muted";
+      hint.textContent = "No zones known for this map (config zones empty).";
+      zoneList.appendChild(hint);
+    } else {
+      zones.forEach(z => {
+        const item = document.createElement("label");
+        item.className = "zone";
+
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.checked = isZoneEnabled(mapId, z);
+        cb.addEventListener("change", () => setZoneEnabled(mapId, z, cb.checked));
+
+        const txt = document.createElement("span");
+        txt.className = "mono";
+        txt.textContent = z;
+
+        item.appendChild(cb);
+        item.appendChild(txt);
+        zoneList.appendChild(item);
+      });
+    }
+
+    details.appendChild(zoneList);
+
+    row.appendChild(head);
+    row.appendChild(details);
+
+    listEl.appendChild(row);
+  });
+}
+
+async function loadAll(){
+  setStatus("Loading...");
+  try{
+    const [cfgRes, metaRes, bountyRes] = await Promise.all([
+      fetch("/api/config", { method:"GET" }),
+      fetch("/api/meta", { method:"GET" }),
+      fetch("/api/bounty/status", { method:"GET" })
+    ]);
+
+    if (!cfgRes.ok) throw new Error("Config HTTP " + cfgRes.status);
+    cfg = await cfgRes.json();
+
+    if (metaRes.ok) meta = await metaRes.json();
+    else meta = { maps: Object.keys(cfg.maps || {}), zonesByMap: {} };
+
+    if (bountyRes.ok) bounty = await bountyRes.json();
+
+    versionBadgeEl.textContent = meta.version || "unknown";
+
+    render();
+    renderBounty();
+    setStatus("Loaded.");
+  }catch(err){
+    console.error(err);
+    setStatus("Load failed: " + err.message, true);
+  }
+}
+
+async function save(){
+  if (!cfg){ setStatus("Nothing to save.", true); return; }
+
+  setStatus("Saving...");
+  try{
+    const res = await fetch("/api/config", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(cfg, null, 2)
+    });
+
+    const txt = await res.text();
+    if (!res.ok) throw new Error(txt || ("HTTP " + res.status));
+
+    setStatus(txt || "Saved.");
+  }catch(err){
+    console.error(err);
+    setStatus("Save failed: " + err.message, true);
+  }
+}
+
+async function setHeat(){
+  bountyStatusEl.textContent = "Saving...";
+  try{
+    const heat = clampInt(heatInputEl.value, 0, Number(heatInputEl.max || 100));
+    const res = await fetch("/api/bounty/heat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ heat })
+    });
+    const responseText = await res.text();
+    if (!res.ok) throw new Error(responseText || ("HTTP " + res.status));
+    bounty = JSON.parse(responseText);
+    renderBounty();
+    bountyStatusEl.textContent = "Saved.";
+  }catch(err){
+    bountyStatusEl.textContent = "Failed: " + err.message;
+  }
+}
+
+async function resetBounty(){
+  bountyStatusEl.textContent = "Resetting...";
+  try{
+    const res = await fetch("/api/bounty/reset", { method: "POST" });
+    const responseText = await res.text();
+    if (!res.ok) throw new Error(responseText || ("HTTP " + res.status));
+    bounty = JSON.parse(responseText);
+    renderBounty();
+    bountyStatusEl.textContent = "Reset.";
+  }catch(err){
+    bountyStatusEl.textContent = "Failed: " + err.message;
+  }
+}
+
+loadAll();
+</script>
+</body>
+</html>

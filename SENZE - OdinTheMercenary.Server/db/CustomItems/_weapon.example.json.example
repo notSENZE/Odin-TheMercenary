@@ -1,0 +1,23 @@
+{
+  "PUT_NEW_UNIQUE_ITEM_ID_HERE": {
+    "itemTplToClone": "676176d362e0497044079f4c",
+    "parentId": "5447b5f14bdc2d61278b4567",
+    "handbookParentId": "5b5f78fc86f77409407a7f90",
+    "overrideProperties": {
+      "BackgroundColor": "red"
+    },
+    "locales": {
+      "en": {
+        "name": "Odin's custom weapon",
+        "shortName": "Odin",
+        "description": "A weapon carried exclusively by Odin."
+      }
+    },
+    "fleaPriceRoubles": 0,
+    "handbookPriceRoubles": 0,
+    "addtoBots": false,
+    "addtoTraders": false,
+    "addtoStaticAmmo": false,
+    "addtoStaticLootContainers": false
+  }
+}

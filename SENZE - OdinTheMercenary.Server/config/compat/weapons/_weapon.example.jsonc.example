@@ -1,0 +1,14 @@
+{
+  "rules": [
+    {
+      "TARGET-TPL": "PUT_WEAPON_OR_ATTACHMENT_ID_HERE",
+      "ALLOWED_TPLS": [
+        "PUT_ALLOWED_ATTACHMENT_ID_HERE"
+      ],
+      "SLOT_NAMES": [
+        "mod_scope"
+      ],
+      "REPLACE": false
+    }
+  ]
+}

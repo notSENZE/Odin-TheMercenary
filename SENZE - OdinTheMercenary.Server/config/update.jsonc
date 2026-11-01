@@ -1,0 +1,6 @@
+{
+  // Check the official GitHub releases once when the SPT server starts.
+  "enabled": true,
+  // Abort the request if GitHub does not answer within this many seconds.
+  "timeoutSeconds": 5
+}

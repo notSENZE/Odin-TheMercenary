@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net471</TargetFramework>
+    <AssemblyName>OdinTheMercenary.Prepatch</AssemblyName>
+    <RootNamespace>OdinTheMercenary.Prepatch</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <LangVersion>latest</LangVersion>
+    <Configurations>Debug;Release</Configurations>
+    <Version>1.0.0</Version>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+    <InformationalVersion>1.0.0</InformationalVersion>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <NuGetAudit>false</NuGetAudit>
+
+    <SptRoot Condition="'$(SptRoot)' == ''">S:\SPT</SptRoot>
+    <SptManagedPath>$(SptRoot)\EscapeFromTarkov_Data\Managed</SptManagedPath>
+    <SptBepInExPath>$(SptRoot)\BepInEx</SptBepInExPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="MoreBotsPrepatch">
+      <HintPath>$(SptBepInExPath)\patchers\MoreBotsPrepatch\MoreBotsPrepatch.dll</HintPath>
+    </Reference>
+
+    <Reference Include="0Harmony">
+      <HintPath>$(SptBepInExPath)\core\0Harmony.dll</HintPath>
+    </Reference>
+    <Reference Include="BepInEx">
+      <HintPath>$(SptBepInExPath)\core\BepInEx.dll</HintPath>
+    </Reference>
+    <Reference Include="Mono.Cecil">
+      <HintPath>$(SptBepInExPath)\core\Mono.Cecil.dll</HintPath>
+    </Reference>
+
+    <Reference Include="UnityEngine">
+      <HintPath>$(SptManagedPath)\UnityEngine.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(SptManagedPath)\UnityEngine.CoreModule.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+</Project>

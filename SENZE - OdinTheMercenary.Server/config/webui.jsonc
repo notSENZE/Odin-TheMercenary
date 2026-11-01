@@ -1,0 +1,10 @@
+{
+  // Local config UI for Odin spawns.
+  // Open in browser: http://127.0.0.1:6970
+  "enabled": true,
+  "host": "127.0.0.1",
+  "port": 6970,
+
+  // If false, only localhost may access the UI (recommended).
+  "allowRemote": false
+}
