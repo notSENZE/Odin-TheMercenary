@@ -12,7 +12,7 @@ And he's out to get you!
 **SPT version:** `~4.1.6`  
 **Dependencies:** [MoreBotsAPI](https://sp-mod.com/mod/2426/morebotsapi), [BigBrain](https://sp-mod.com/mod/902/bigbrain), [Waypoints - Expanded Navmesh](https://sp-mod.com/mod/827/waypoints-expanded-navmesh), [WTT - Content Backport](https://sp-mod.com/mod/2512/wtt-content-backport), [WTT - CommonLib](https://sp-mod.com/mod/2310/wtt-commonlib) 
 **FIKA compatibility:** Probably  
-**Recommended mod:** -  
+**Recommendations:** -  
 **Known incompatibilities:** -  
 
 
