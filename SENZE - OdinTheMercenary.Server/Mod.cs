@@ -11,7 +11,7 @@ namespace TheMercenaryServer;
 
 public sealed class ModMetadata : IModMetadata
 {
-    public const string VersionNumber = "1.3.1";
+    public const string VersionNumber = "1.3.2";
 
     public string ModGuid { get; init; } = "com.senze.odinthemercenary";
     public string Name { get; init; } = "Odin - The Mercenary";

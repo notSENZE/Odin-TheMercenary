@@ -1,6 +1,6 @@
 {
   "enableLogs": true,
-  "huntChance": 50,
+  "huntChance": 35,
   "maps": {
     "shoreline": {
       "enabled": true,
@@ -33,12 +33,9 @@
         "ZoneForestTruck",
         "ZoneGasStation",
         "ZoneGreenHouses",
-        "ZoneIsland",
         "ZonePassClose",
-        "ZonePort",
         "ZonePowerStation",
         "ZoneRailWays",
-        "ZoneSmuglers",
         "ZoneStartVillage",
         "ZoneTunnel"
       ]
