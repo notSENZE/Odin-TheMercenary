@@ -13,9 +13,12 @@ namespace TheMercenaryServer.Controllers;
 public sealed class OdinBotInventoryMiddleware : StaticRouter
 {
     private const string OdinRole = "mercenary";
+    private const string GungnirWeaponTpl = "6895bb82c4519957df062f82";
+    private const string GungnirMagazineTpl = "59c1383d86f774290a37e0ca";
     private const string ReckoningAmmoTpl = "6ae7492cc52f2678713f2170";
-    private const int SecureAmmoStackSize = 300;
-    private const int SecureAmmoStackCount = 2;
+    private const string AllvaterWeaponTpl = "6aea113c1edb080a9b5d5a9f";
+    private const string AllvaterMagazineTpl = "5ac66c5d5acfc4001718d314";
+    private const string CbjAmmoTpl = "64b8725c4b75259c590fa899";
 
     public OdinBotInventoryMiddleware(
         JsonUtil jsonUtil,
@@ -68,7 +71,54 @@ public sealed class OdinBotInventoryMiddleware : StaticRouter
                                 continue;
                             }
 
-                            var secureContainer = LimitSecureContainerAmmo(bot, logger);
+                            var primaryWeapon = FindPrimaryWeapon(bot);
+                            if (primaryWeapon == null)
+                            {
+                                logger.Warn("[Inventory] Odin generated without a primary weapon.");
+                                continue;
+                            }
+
+                            var weaponTpl = primaryWeapon["_tpl"]?.GetValue<string>();
+                            var weaponId = primaryWeapon["_id"]?.GetValue<string>();
+
+                            var loadout = weaponTpl switch
+                            {
+                                GungnirWeaponTpl => (
+                                    MagazineTpl: GungnirMagazineTpl,
+                                    SpareMagazineCount: 3,
+                                    AmmoTpl: ReckoningAmmoTpl,
+                                    AmmoStackSize: 300,
+                                    AmmoStackCount: 2),
+                                AllvaterWeaponTpl => (
+                                    MagazineTpl: AllvaterMagazineTpl,
+                                    SpareMagazineCount: 4,
+                                    AmmoTpl: CbjAmmoTpl,
+                                    AmmoStackSize: 60,
+                                    AmmoStackCount: 10),
+                                _ => default
+                            };
+
+                            if (string.IsNullOrWhiteSpace(loadout.MagazineTpl) || string.IsNullOrWhiteSpace(weaponId))
+                            {
+                                logger.Warn($"[Inventory] Odin generated with unsupported primary weapon '{weaponTpl}'.");
+                                continue;
+                            }
+
+                            LimitSpareMagazines(
+                                bot,
+                                weaponId,
+                                loadout.MagazineTpl,
+                                loadout.SpareMagazineCount,
+                                logger
+                            );
+
+                            var secureContainer = LimitSecureContainerAmmo(
+                                bot,
+                                loadout.AmmoTpl,
+                                loadout.AmmoStackSize,
+                                loadout.AmmoStackCount,
+                                logger
+                            );
                             AddRewardLoot(
                                 bot,
                                 secureContainer,
@@ -92,8 +142,81 @@ public sealed class OdinBotInventoryMiddleware : StaticRouter
         ];
     }
 
+    private static JsonObject? FindPrimaryWeapon(JsonObject bot)
+    {
+        if (bot["Inventory"]?["items"] is not JsonArray items)
+            return null;
+
+        return items
+            .OfType<JsonObject>()
+            .FirstOrDefault(item => item["slotId"]?.GetValue<string>() == "FirstPrimaryWeapon");
+    }
+
+    private static void LimitSpareMagazines(
+        JsonObject bot,
+        string weaponId,
+        string magazineTpl,
+        int desiredCount,
+        MercenaryLogger logger
+    )
+    {
+        if (bot["Inventory"]?["items"] is not JsonArray items)
+            return;
+
+        var spareMagazineIds = items
+            .OfType<JsonObject>()
+            .Where(item =>
+                item["_tpl"]?.GetValue<string>() == magazineTpl &&
+                item["parentId"]?.GetValue<string>() != weaponId)
+            .Select(item => item["_id"]?.GetValue<string>())
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Cast<string>()
+            .ToList();
+
+        if (spareMagazineIds.Count < desiredCount)
+        {
+            logger.Warn(
+                $"[Inventory] Odin generated with only {spareMagazineIds.Count}/{desiredCount} spare magazine(s) for '{magazineTpl}'."
+            );
+            return;
+        }
+
+        var itemIdsToRemove = new HashSet<string>(spareMagazineIds.Skip(desiredCount));
+        if (itemIdsToRemove.Count == 0)
+            return;
+
+        var foundChild = true;
+        while (foundChild)
+        {
+            foundChild = false;
+            foreach (var item in items.OfType<JsonObject>())
+            {
+                var parentId = item["parentId"]?.GetValue<string>();
+                var itemId = item["_id"]?.GetValue<string>();
+                if (string.IsNullOrWhiteSpace(parentId) || string.IsNullOrWhiteSpace(itemId))
+                    continue;
+
+                if (itemIdsToRemove.Contains(parentId) && itemIdsToRemove.Add(itemId))
+                    foundChild = true;
+            }
+        }
+
+        for (var index = items.Count - 1; index >= 0; index--)
+        {
+            if (items[index] is JsonObject item &&
+                item["_id"]?.GetValue<string>() is string itemId &&
+                itemIdsToRemove.Contains(itemId))
+            {
+                items.RemoveAt(index);
+            }
+        }
+    }
+
     private static (string? Id, List<JsonNode> FreeLocations) LimitSecureContainerAmmo(
         JsonObject bot,
+        string ammoTpl,
+        int ammoStackSize,
+        int ammoStackCount,
         MercenaryLogger logger
     )
     {
@@ -113,34 +236,36 @@ public sealed class OdinBotInventoryMiddleware : StaticRouter
         for (var index = 0; index < items.Count; index++)
         {
             if (items[index] is JsonObject item &&
-                item["_tpl"]?.GetValue<string>() == ReckoningAmmoTpl &&
+                item["_tpl"]?.GetValue<string>() == ammoTpl &&
                 item["parentId"]?.GetValue<string>() == secureContainerId)
             {
                 ammoIndexes.Add(index);
             }
         }
 
-        if (ammoIndexes.Count < SecureAmmoStackCount)
+        if (ammoIndexes.Count < ammoStackCount)
         {
-            logger.Warn($"[Inventory] Odin generated with only {ammoIndexes.Count} secure RECKONING ammo stack(s).");
+            logger.Warn(
+                $"[Inventory] Odin generated with only {ammoIndexes.Count}/{ammoStackCount} secure ammo stack(s) for '{ammoTpl}'."
+            );
             return (secureContainerId, []);
         }
 
-        foreach (var index in ammoIndexes.Take(SecureAmmoStackCount))
+        foreach (var index in ammoIndexes.Take(ammoStackCount))
         {
             var item = (JsonObject)items[index]!;
             var update = item["upd"] as JsonObject ?? new JsonObject();
-            update["StackObjectsCount"] = SecureAmmoStackSize;
+            update["StackObjectsCount"] = ammoStackSize;
             item["upd"] = update;
         }
 
         var freeLocations = ammoIndexes
-            .Skip(SecureAmmoStackCount)
+            .Skip(ammoStackCount)
             .Select(index => (items[index] as JsonObject)?["location"]?.DeepClone())
             .OfType<JsonNode>()
             .ToList();
 
-        foreach (var index in ammoIndexes.Skip(SecureAmmoStackCount).Reverse())
+        foreach (var index in ammoIndexes.Skip(ammoStackCount).Reverse())
             items.RemoveAt(index);
 
         return (secureContainerId, freeLocations);
