@@ -19,22 +19,31 @@
       <span id="status" class="status"></span>
     </div>
 
-    <section class="bounty-card">
-      <div class="bounty-head">
+    <section class="hunt-card">
+      <div class="hunt-head">
         <div>
-          <div class="bounty-title">Odin's Bounty</div>
-          <div id="bountyState" class="muted">No profile loaded.</div>
+          <div class="hunt-title">
+            Direct hunt chance
+            <span class="tooltip" tabindex="0" aria-describedby="huntTooltip">
+              ?
+              <span id="huntTooltip" class="tooltip-text" role="tooltip">
+                Rolled once after Odin actually spawns. This does not change his map spawn chance.
+                For example, 10% spawn chance combined with 50% hunt chance means Odin directly
+                hunts the player in approximately 5% of all raids.
+              </span>
+            </span>
+          </div>
+          <div class="muted">Chance that a spawned Odin activates direct player hunting.</div>
         </div>
-        <div id="heatValue" class="heat-value mono">0 / 100</div>
+
+        <div class="hunt-controls">
+          <input id="huntChanceRange" type="range" min="0" max="100" value="50" />
+          <label class="hunt-number">
+            <input id="huntChanceInput" type="number" min="0" max="100" value="50" />
+            <span>%</span>
+          </label>
+        </div>
       </div>
-      <div class="heat-track"><div id="heatFill" class="heat-fill"></div></div>
-      <div class="bounty-controls">
-        <label>Set Heat <input id="heatInput" type="number" min="0" max="100" value="0" /></label>
-        <button id="setHeatBtn">Apply for next raid</button>
-        <button id="resetBountyBtn">Reset</button>
-        <span id="bountyStatus" class="status"></span>
-      </div>
-      <div id="bountyReason" class="bounty-reason muted"></div>
     </section>
 
     <div id="list" class="list"></div>
@@ -48,18 +57,14 @@
 const statusEl = document.getElementById("status");
 const listEl = document.getElementById("list");
 const versionBadgeEl = document.getElementById("versionBadge");
-const bountyStateEl = document.getElementById("bountyState");
-const bountyReasonEl = document.getElementById("bountyReason");
-const bountyStatusEl = document.getElementById("bountyStatus");
-const heatValueEl = document.getElementById("heatValue");
-const heatFillEl = document.getElementById("heatFill");
-const heatInputEl = document.getElementById("heatInput");
+const huntChanceRangeEl = document.getElementById("huntChanceRange");
+const huntChanceInputEl = document.getElementById("huntChanceInput");
 document.getElementById("openAddress").textContent = window.location.origin;
 
 document.getElementById("reloadBtn").addEventListener("click", () => loadAll());
 document.getElementById("saveBtn").addEventListener("click", () => save());
-document.getElementById("setHeatBtn").addEventListener("click", () => setHeat());
-document.getElementById("resetBountyBtn").addEventListener("click", () => resetBounty());
+huntChanceRangeEl.addEventListener("input", () => setHuntChance(huntChanceRangeEl.value));
+huntChanceInputEl.addEventListener("input", () => setHuntChance(huntChanceInputEl.value));
 
 function setStatus(msg, isError=false){
   statusEl.textContent = msg || "";
@@ -73,6 +78,13 @@ function clampInt(v, min, max){
   if (n < min) n = min;
   if (n > max) n = max;
   return n;
+}
+
+function setHuntChance(value){
+  if (!cfg) return;
+  cfg.huntChance = clampInt(value, 0, 100);
+  huntChanceRangeEl.value = String(cfg.huntChance);
+  huntChanceInputEl.value = String(cfg.huntChance);
 }
 
 function ensureMapCfg(mapId){
@@ -107,47 +119,15 @@ function setZoneEnabled(mapId, zone, enabled){
 
 let cfg = null;
 let meta = null;
-let bounty = null;
-
-function renderBounty(){
-  if (!bounty || !bounty.hasProfile){
-    bountyStateEl.textContent = "No unambiguous profile yet. Start one raid first.";
-    bountyReasonEl.textContent = bounty ? bounty.reason : "";
-    heatValueEl.textContent = "0 / 100";
-    heatFillEl.style.width = "0%";
-    return;
-  }
-
-  const maxHeat = Math.max(1, Number(bounty.maxHeat || 100));
-  const heat = clampInt(bounty.heat, 0, maxHeat);
-  heatInputEl.max = String(maxHeat);
-  heatInputEl.value = String(heat);
-  heatValueEl.textContent = heat + " / " + maxHeat;
-  heatFillEl.style.width = Math.round((heat / maxHeat) * 100) + "%";
-
-  if (!bounty.enabled){
-    bountyStateEl.textContent = "Bounty system disabled in config/bounty.jsonc.";
-  } else if (bounty.huntActive){
-    bountyStateEl.textContent = "Odin is hunting now. His spawn is forced.";
-  } else if (bounty.respiteRaidsRemaining > 0){
-    bountyStateEl.textContent = "Respite: " + bounty.respiteRaidsRemaining + " raid(s) remaining.";
-  } else if (bounty.contractActive){
-    bountyStateEl.textContent = "Contract active. Odin will hunt in the next PMC raid.";
-  } else {
-    bountyStateEl.textContent = "No active contract. Activates at " + bounty.activationThreshold + " Heat.";
-  }
-
-  bountyReasonEl.textContent = bounty.reason || "";
-}
 
 function render(){
   listEl.innerHTML = "";
+  setHuntChance(cfg.huntChance ?? 50);
 
   const maps = (meta && meta.maps) ? meta.maps : Object.keys(cfg.maps || {});
   maps.forEach(mapId => {
     ensureMapCfg(mapId);
 
-    // Self-heal: if config zones are empty but meta has zones, copy them into cfg.zones (authoritative list).
     const metaZones = (meta && meta.zonesByMap && meta.zonesByMap[mapId]) ? meta.zonesByMap[mapId] : [];
     if ((cfg.maps[mapId].zones || []).length === 0 && metaZones.length > 0){
       cfg.maps[mapId].zones = [...metaZones];
@@ -247,10 +227,9 @@ function render(){
 async function loadAll(){
   setStatus("Loading...");
   try{
-    const [cfgRes, metaRes, bountyRes] = await Promise.all([
+    const [cfgRes, metaRes] = await Promise.all([
       fetch("/api/config", { method:"GET" }),
-      fetch("/api/meta", { method:"GET" }),
-      fetch("/api/bounty/status", { method:"GET" })
+      fetch("/api/meta", { method:"GET" })
     ]);
 
     if (!cfgRes.ok) throw new Error("Config HTTP " + cfgRes.status);
@@ -259,12 +238,9 @@ async function loadAll(){
     if (metaRes.ok) meta = await metaRes.json();
     else meta = { maps: Object.keys(cfg.maps || {}), zonesByMap: {} };
 
-    if (bountyRes.ok) bounty = await bountyRes.json();
-
     versionBadgeEl.textContent = meta.version || "unknown";
 
     render();
-    renderBounty();
     setStatus("Loaded.");
   }catch(err){
     console.error(err);
@@ -290,39 +266,6 @@ async function save(){
   }catch(err){
     console.error(err);
     setStatus("Save failed: " + err.message, true);
-  }
-}
-
-async function setHeat(){
-  bountyStatusEl.textContent = "Saving...";
-  try{
-    const heat = clampInt(heatInputEl.value, 0, Number(heatInputEl.max || 100));
-    const res = await fetch("/api/bounty/heat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ heat })
-    });
-    const responseText = await res.text();
-    if (!res.ok) throw new Error(responseText || ("HTTP " + res.status));
-    bounty = JSON.parse(responseText);
-    renderBounty();
-    bountyStatusEl.textContent = "Saved.";
-  }catch(err){
-    bountyStatusEl.textContent = "Failed: " + err.message;
-  }
-}
-
-async function resetBounty(){
-  bountyStatusEl.textContent = "Resetting...";
-  try{
-    const res = await fetch("/api/bounty/reset", { method: "POST" });
-    const responseText = await res.text();
-    if (!res.ok) throw new Error(responseText || ("HTTP " + res.status));
-    bounty = JSON.parse(responseText);
-    renderBounty();
-    bountyStatusEl.textContent = "Reset.";
-  }catch(err){
-    bountyStatusEl.textContent = "Failed: " + err.message;
   }
 }
 

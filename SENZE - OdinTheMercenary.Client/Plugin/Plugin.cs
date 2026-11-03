@@ -16,30 +16,11 @@ public sealed class Plugin : BaseUnityPlugin
 {
     public static ManualLogSource? LogSource;
 
-    internal static ConfigEntry<bool> EnableHunt { get; private set; } = null!;
     internal static ConfigEntry<bool> UsePropitalOnPlayerHit { get; private set; } = null!;
-    internal static bool IsBountyHuntActive { get; private set; }
-    internal static string BountyHuntMessage { get; private set; } = "BOUNTY ACTIVE - ODIN IS HUNTING YOU.";
-    internal static bool ShouldHunt => EnableHunt.Value || IsBountyHuntActive;
-
-    internal static void SetBountyHunt(bool active, string? message = null)
-    {
-        IsBountyHuntActive = active;
-
-        if (!string.IsNullOrWhiteSpace(message))
-            BountyHuntMessage = message!;
-    }
 
     private void Awake()
     {
         LogSource = Logger;
-
-        EnableHunt = Config.Bind(
-            "Odin",
-            "EnableHunt",
-            true,
-            "Enable/disable Odin hunt behavior (BigBrain layer + target tracking)."
-        );
 
         UsePropitalOnPlayerHit = Config.Bind(
             "Odin",

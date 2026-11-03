@@ -1,5 +1,6 @@
 {
   "enableLogs": true,
+  "huntChance": 50,
   "maps": {
     "shoreline": {
       "enabled": true,

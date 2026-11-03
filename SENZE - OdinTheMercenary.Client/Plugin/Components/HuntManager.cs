@@ -12,9 +12,10 @@ namespace TheMercenary.Components;
 
 public sealed class HuntManager : MonoBehaviourSingleton<HuntManager>
 {
-    private const int OdinWildSpawnTypeValue = 836500;
+    private const int DefaultHuntChance = 50;
 
     private bool _odinNotifiedThisRaid;
+    private int _huntChance;
 
     // Odin is a single boss-type in this mod -> one raid target is enough (and much cheaper).
     private IPlayer? _raidTarget;
@@ -26,7 +27,7 @@ public sealed class HuntManager : MonoBehaviourSingleton<HuntManager>
         _odinNotifiedThisRaid = false;
         _raidTarget = null;
         huntTargets.Clear();
-        LoadBountyStatus();
+        _huntChance = LoadHuntChance();
 
         // Robustness: avoid duplicate subscriptions between raids.
         Singleton<IBotGame>.Instance.BotsController.BotSpawner.OnBotCreated -= OnBotCreated;
@@ -35,10 +36,16 @@ public sealed class HuntManager : MonoBehaviourSingleton<HuntManager>
 
     private void OnBotCreated(BotOwner bot)
     {
-        TryNotifyOdinSpawn(bot);
-
         if (!WildSpawnTypeExtensions.IsMercenary(bot.Profile.Info.Settings.Role))
             return;
+
+        var roll = Random.Range(0, 100);
+        var huntActive = roll < _huntChance;
+        TryNotifyOdinSpawn(huntActive);
+
+        TheMercenary.Plugin.LogSource?.LogInfo(
+            $"Odin hunt roll: {roll + 1}/100 at {_huntChance}% - {(huntActive ? "active" : "inactive")}."
+        );
 
         if (TheMercenary.Plugin.UsePropitalOnPlayerHit.Value)
         {
@@ -46,36 +53,29 @@ public sealed class HuntManager : MonoBehaviourSingleton<HuntManager>
             propitalController.Init(bot);
         }
 
-        if (!TheMercenary.Plugin.ShouldHunt)
+        if (!huntActive)
             return;
 
         var huntManager = bot.gameObject.GetOrAddComponent<BotHuntManager>();
         huntManager.Init(bot, this);
-        TheMercenary.Plugin.LogSource?.LogInfo(
-            $"Odin hunt controller initialized (bounty: {TheMercenary.Plugin.IsBountyHuntActive})."
-        );
+        TheMercenary.Plugin.LogSource?.LogInfo("Odin hunt controller initialized.");
         FindTarget(huntManager);
     }
 
-    private void TryNotifyOdinSpawn(BotOwner bot)
+    private void TryNotifyOdinSpawn(bool huntActive)
     {
         if (_odinNotifiedThisRaid)
             return;
 
-        if ((int)bot.Profile.Info.Settings.Role != OdinWildSpawnTypeValue)
-            return;
-
         _odinNotifiedThisRaid = true;
-        var message = TheMercenary.Plugin.IsBountyHuntActive
-            ? TheMercenary.Plugin.BountyHuntMessage
-            : "ODIN HAS SPAWNED.";
+        var message = huntActive ? "ODIN IS HUNTING YOU." : "ODIN HAS SPAWNED.";
 
         NotificationManager.DisplayMessageNotification(message, ENotificationDurationType.Long);
     }
 
     public void FindTarget(BotHuntManager hunter)
     {
-        if (!TheMercenary.Plugin.ShouldHunt)
+        if (!hunter.IsEnabled)
             return;
 
         // Fast path: keep using the cached raid target if it's still valid.
@@ -129,29 +129,24 @@ public sealed class HuntManager : MonoBehaviourSingleton<HuntManager>
         return true;
     }
 
-    private static void LoadBountyStatus()
+    private static int LoadHuntChance()
     {
-        TheMercenary.Plugin.SetBountyHunt(false);
-
         try
         {
-            var json = RequestHandler.GetJson("/odin-the-mercenary/bounty/status");
+            var json = RequestHandler.GetJson("/odin-the-mercenary/hunt/settings");
             var token = JToken.Parse(json);
 
-            // Keep this tolerant in case another SPT version wraps custom route data.
             if (token["data"] is JObject wrappedData)
                 token = wrappedData;
 
-            var active = token.Value<bool?>("huntActive") ?? false;
-            var message = token.Value<string>("message");
-            TheMercenary.Plugin.SetBountyHunt(active, message);
-
-            if (active)
-                TheMercenary.Plugin.LogSource?.LogInfo("Odin bounty hunt is active for this raid.");
+            return Mathf.Clamp(token.Value<int?>("huntChance") ?? DefaultHuntChance, 0, 100);
         }
         catch (System.Exception ex)
         {
-            TheMercenary.Plugin.LogSource?.LogWarning($"Could not read Odin bounty status: {ex.Message}");
+            TheMercenary.Plugin.LogSource?.LogWarning(
+                $"Could not read Odin hunt chance; using {DefaultHuntChance}%: {ex.Message}"
+            );
+            return DefaultHuntChance;
         }
     }
 }

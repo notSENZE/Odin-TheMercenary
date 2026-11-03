@@ -6,6 +6,7 @@ namespace TheMercenary.Components;
 
 public sealed class BotHuntManager : MonoBehaviour
 {
+    public bool IsEnabled { get; private set; }
     public BotOwner botOwner = null!;
     public HuntManager huntManager = null!;
     public IPlayer huntTarget = null!;
@@ -18,6 +19,7 @@ public sealed class BotHuntManager : MonoBehaviour
 
     public void Init(BotOwner bot, HuntManager manager)
     {
+        IsEnabled = true;
         botOwner = bot;
         huntManager = manager;
         nextTargetUpdate = Time.time + 2f;
@@ -33,7 +35,7 @@ public sealed class BotHuntManager : MonoBehaviour
 
     public void Update()
     {
-        if (!TheMercenary.Plugin.ShouldHunt)
+        if (!IsEnabled || botOwner == null)
             return;
 
         if (Time.time > nextTargetUpdate)

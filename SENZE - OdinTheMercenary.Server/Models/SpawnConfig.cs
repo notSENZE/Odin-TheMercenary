@@ -12,6 +12,11 @@ public sealed class SpawnConfig
     /// </summary>
     public bool enableLogs { get; set; } = false;
 
+    /// <summary>
+    /// Chance that Odin activates direct player hunting after he spawns. 0-100.
+    /// </summary>
+    public int huntChance { get; set; } = 50;
+
     public Dictionary<string, MapSpawnConfig> maps { get; set; } = new();
 }
 

@@ -22,6 +22,7 @@ public sealed class SpawnConfigController
         _modRoot = _modHelper.GetAbsolutePathToModFolder(Assembly.GetExecutingAssembly());
         _configPath = Path.Join("config", "spawn.jsonc");
         Config = _modHelper.GetJsonDataFromFile<SpawnConfig>(_modRoot, _configPath);
+        Normalize(Config);
     }
 
 
@@ -30,10 +31,13 @@ public sealed class SpawnConfigController
     public void ReloadFromDisk()
     {
         Config = _modHelper.GetJsonDataFromFile<SpawnConfig>(_modRoot, _configPath);
+        Normalize(Config);
     }
 
     public void SaveToDisk(SpawnConfig newConfig)
     {
+        Normalize(newConfig);
+
         // Keep it simple: write JSON (no comments). JSONC parser accepts plain JSON.
         var absPath = GetConfigAbsolutePath();
         var dir = Path.GetDirectoryName(absPath);
@@ -47,5 +51,11 @@ public sealed class SpawnConfigController
 
         File.WriteAllText(absPath, json);
         Config = newConfig;
+    }
+
+    private static void Normalize(SpawnConfig config)
+    {
+        config.huntChance = Math.Clamp(config.huntChance, 0, 100);
+        config.maps ??= new Dictionary<string, MapSpawnConfig>();
     }
 }

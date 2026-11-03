@@ -14,7 +14,6 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using TheMercenaryServer.Models;
-using TheMercenaryServer.Services;
 
 namespace TheMercenaryServer.Controllers;
 
@@ -27,7 +26,6 @@ public sealed class WebUiServer(
     SpawnConfigController spawnConfig,
     LocationTable locationTable,
     SpawnController spawnController,
-    BountyService bountyService,
     MercenaryLogger logger
 ) : IOnLoad
 {
@@ -129,33 +127,6 @@ public sealed class WebUiServer(
                 return;
             }
 
-            if (path == "/api/bounty/status" && req.HttpMethod == "GET")
-            {
-                var status = await bountyService.GetStatusAsync(cancellationToken).ConfigureAwait(false);
-                await WriteJson(res, status).ConfigureAwait(false);
-                return;
-            }
-
-            if (path == "/api/bounty/heat" && req.HttpMethod == "POST")
-            {
-                await HandleSetBountyHeat(req, res, cancellationToken).ConfigureAwait(false);
-                return;
-            }
-
-            if (path == "/api/bounty/reset" && req.HttpMethod == "POST")
-            {
-                var result = await bountyService.TryResetLatestStateAsync(cancellationToken).ConfigureAwait(false);
-                if (!result.Success)
-                {
-                    res.StatusCode = 409;
-                    await WriteText(res, "No unambiguous player profile is available yet. Start one raid first.").ConfigureAwait(false);
-                    return;
-                }
-
-                await WriteJson(res, result.Status).ConfigureAwait(false);
-                return;
-            }
-
             // Static files
             if (path == "/")
             {
@@ -227,6 +198,8 @@ public sealed class WebUiServer(
             await WriteText(res, "Invalid JSON: empty payload").ConfigureAwait(false);
             return;
         }
+
+        newCfg.huntChance = Math.Clamp(newCfg.huntChance, 0, 100);
 
         // Minimal validation: clamp chance, normalize zones + disabledZones
         foreach (var kvp in newCfg.maps)
@@ -326,47 +299,6 @@ public sealed class WebUiServer(
         await WriteBytes(res, Encoding.UTF8.GetBytes(json)).ConfigureAwait(false);
     }
 
-    private async Task HandleSetBountyHeat(
-        HttpListenerRequest req,
-        HttpListenerResponse res,
-        CancellationToken cancellationToken)
-    {
-        using var reader = new StreamReader(req.InputStream, req.ContentEncoding);
-        var body = await reader.ReadToEndAsync().ConfigureAwait(false);
-
-        BountyHeatRequest? request;
-        try
-        {
-            request = JsonSerializer.Deserialize<BountyHeatRequest>(body, new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true
-            });
-        }
-        catch (Exception ex)
-        {
-            res.StatusCode = 400;
-            await WriteText(res, $"Invalid JSON: {ex.Message}").ConfigureAwait(false);
-            return;
-        }
-
-        if (request == null)
-        {
-            res.StatusCode = 400;
-            await WriteText(res, "Invalid JSON: empty payload").ConfigureAwait(false);
-            return;
-        }
-
-        var result = await bountyService.TrySetLatestHeatAsync(request.heat, cancellationToken).ConfigureAwait(false);
-        if (!result.Success)
-        {
-            res.StatusCode = 409;
-            await WriteText(res, "No unambiguous player profile is available yet. Start one raid first.").ConfigureAwait(false);
-            return;
-        }
-
-        await WriteJson(res, result.Status).ConfigureAwait(false);
-    }
-
     private static bool TryFindLocation(
         Dictionary<string, Location> locDict,
         string locationKey,
@@ -430,14 +362,6 @@ public sealed class WebUiServer(
 
     private static Task WriteText(HttpListenerResponse res, string text)
         => WriteBytes(res, Encoding.UTF8.GetBytes(text));
-
-    private static Task WriteJson<T>(HttpListenerResponse res, T value)
-    {
-        var json = JsonSerializer.Serialize(value, new JsonSerializerOptions { WriteIndented = true });
-        res.StatusCode = 200;
-        res.ContentType = "application/json; charset=utf-8";
-        return WriteBytes(res, Encoding.UTF8.GetBytes(json));
-    }
 
     private static Task WriteBytes(HttpListenerResponse res, byte[] bytes)
     {

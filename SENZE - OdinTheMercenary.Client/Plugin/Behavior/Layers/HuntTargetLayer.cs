@@ -29,7 +29,7 @@ internal sealed class HuntTargetLayer : CustomLayer
 
     public override bool IsActive()
     {
-        if (!TheMercenary.Plugin.ShouldHunt)
+        if (!huntManager.IsEnabled)
             return false;
 
         if (!huntManager.HasTarget())

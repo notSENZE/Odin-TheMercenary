@@ -20,7 +20,7 @@ public sealed class SpawnController(
 {
     private bool _applied;
 
-    public void ApplySpawnConfig(bool force = false, bool forceBountySpawn = false)
+    public void ApplySpawnConfig(bool force = false)
     {
         if (_applied && !force)
             return;
@@ -59,7 +59,7 @@ public sealed class SpawnController(
             if (!mapCfg.enabled)
                 continue;
 
-            var chance = forceBountySpawn ? 100 : ClampChance(mapCfg.chance);
+            var chance = ClampChance(mapCfg.chance);
             if (chance <= 0)
             {
                 logger.Info($"[Spawn] '{locationKeyFromConfig}' enabled but chance is 0%. Skipping.");
@@ -90,7 +90,7 @@ public sealed class SpawnController(
                 BossZone = string.Join(",", enabledZones),
 
                 Delay = 0,
-                ForceSpawn = forceBountySpawn,
+                ForceSpawn = false,
                 IgnoreMaxBots = true,
                 IsRandomTimeSpawn = false,
 
@@ -103,10 +103,7 @@ public sealed class SpawnController(
             });
         }
 
-        if (forceBountySpawn)
-            logger.Warn("Bounty spawn override applied: Odin is forced on every enabled map with an active zone.");
-        else
-            logger.Info(force ? "Spawn config applied (forced)." : "Spawn config applied.");
+        logger.Info(force ? "Spawn config applied (forced)." : "Spawn config applied.");
     }
 
     private static int ClampChance(int v) => v < 0 ? 0 : (v > 100 ? 100 : v);
