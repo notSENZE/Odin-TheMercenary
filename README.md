@@ -17,7 +17,6 @@ And he's out to get you!
 
 
 # DETAILS
-
 **UI**  
 At http://127.0.0.1:6970/, you can configure spawns and hunt status.  
 To save, simply click `save & apply`.
