@@ -19,16 +19,14 @@ And he's out to get you!
 # DETAILS
 
 **UI**  
-At http://127.0.0.1:6970/, you can configure spawns and bounty status.  
+At http://127.0.0.1:6970/, you can configure spawns and hunt status.  
 To save, simply click `save & apply`.
 
-**BOUNTY SYSTEM**  
-Each encounter with Odin earns you one bounty point.  
-Once you reach 100 points, Odin will spawn once on a selected map - regardless of your settings - and hunt you until one of you dies.  
-After that, the count resets to 0 and starts over.  
-Hunt mode can be disabled by pressing `F12`.
+**HUNTING MODE**  
+Hunt Mode determines the probability that Odin will specifically pursue you after his regular spawn. It neither increases his spawn chance nor forces him to spawn.  
+This can be configured in the **UI** under http://127.0.0.1:6970/.
 
-**HEALTH POINTS**  
+**HEALTH**  
 He has **2,520** health points distributed as follows:
 - **Head:** 300
 - **Chest:** 600
@@ -40,6 +38,8 @@ He has **2,520** health points distributed as follows:
 Odin has the following equipment:
 - **Gun:** Radian Weapons Model 1 FA + AR-15 5.56x45 Magpul PMAG D-60 STANAG 60-round magazine
 - **Ammo:** 5.56×45 mm ODN-R ‘Reckoning’ // Dmg: 37, Pen: 56, (Cannot be bought or sold)
+- **Gun #2:** Kalashnikov AK-300 "Allvater" // A fictional rechambered AK-105 chambered in 7.62x35 mm (.300 Blackout).
+- **Ammo #2:** .300 Blackout CBJ
 - **Body Armor:** NFM THOR Integrated Carrier body armor + GAC 4sss2 ballistic plate (front/back) + ESBI level IV ballistic plate (Side)
 - **Head:** Maska-1SCh bulletproof helmet (Olive Drab) + Maska-1SCh face shield (Olive Drab)
 - **Chest Rig:** BlackRock chest rig (Khaki)
